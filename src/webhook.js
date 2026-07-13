@@ -96,6 +96,7 @@ export function createWebhookHandler(calendar, now = () => Date.now()) {
 
   return async function handle(req, res) {
     if (cfg.vapiWebhookSecret && req.headers['x-vapi-secret'] !== cfg.vapiWebhookSecret) {
+      console.warn('webhook rejected: x-vapi-secret mismatch — if this happens during real calls, click "Update AI" in the dashboard to re-sync the assistant with the current VAPI_WEBHOOK_SECRET');
       return res.status(401).json({ error: 'bad secret' });
     }
     const msg = req.body?.message;
@@ -125,7 +126,9 @@ export function createWebhookHandler(calendar, now = () => Date.now()) {
           result = await runTool(tenant, name, args);
         } catch (err) {
           console.error(`tool ${name} failed for tenant ${tenant.id}:`, err);
-          result = 'FOUT: er ging technisch iets mis. Bied aan een bericht aan te nemen.';
+          result = String(err.message || '').includes('no Google Calendar connected')
+            ? 'FOUT: de agenda van dit bedrijf is nog niet gekoppeld aan het systeem. Neem een bericht aan met takeMessage, dat werkt wel.'
+            : 'FOUT: er ging technisch iets mis. Bied aan een bericht aan te nemen.';
         }
         results.push({ toolCallId: tc.id, result });
       }
