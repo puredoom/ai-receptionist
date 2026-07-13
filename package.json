@@ -1,0 +1,17 @@
+{
+  "name": "ai-receptionist",
+  "version": "0.1.0",
+  "description": "Dutch AI phone receptionist SaaS: answers calls via Vapi, books appointments in Google Calendar",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node test/simulate.mjs",
+    "provision": "node scripts/provision.js"
+  },
+  "dependencies": {
+    "express": "^4.19.0"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}
