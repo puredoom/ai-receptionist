@@ -67,7 +67,19 @@ function toolDefs() {
   ];
 }
 
+// Per-language speech pipeline. Deepgram nova-3 covers all our languages;
+// most languages use the fast conversational ElevenLabs multilingual v2, but
+// Lithuanian is only spoken by the newer eleven_v3 model.
+const PIPELINE = {
+  nl: { voiceModel: 'eleven_multilingual_v2' },
+  fr: { voiceModel: 'eleven_multilingual_v2' },
+  en: { voiceModel: 'eleven_multilingual_v2' },
+  de: { voiceModel: 'eleven_multilingual_v2' },
+  lt: { voiceModel: 'eleven_v3' },
+};
+
 export function assistantPayload(tenant) {
+  const langCode = PIPELINE[tenant.language] ? tenant.language : 'nl';
   return {
     name: `${tenant.name} — AI receptionist (tenant ${tenant.id})`,
     firstMessage: buildFirstMessage(tenant),
@@ -80,13 +92,13 @@ export function assistantPayload(tenant) {
     },
     transcriber: {
       provider: 'deepgram',
-      model: 'nova-2',
-      language: ['nl', 'fr', 'en', 'de'].includes(tenant.language) ? tenant.language : 'nl',
+      model: 'nova-3',
+      language: langCode,
     },
     voice: {
       provider: '11labs',
       voiceId: tenant.voice_id || cfg.defaultVoiceId,
-      model: 'eleven_multilingual_v2',
+      model: PIPELINE[langCode].voiceModel,
     },
     server: {
       url: `${cfg.baseUrl}/webhook/vapi`,

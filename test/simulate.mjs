@@ -139,6 +139,7 @@ console.log('\n== multilingual tenants ==');
     ['fr', 'Salon Dupont', 'Créneaux disponibles', 'RÉUSSI', 'lundi', '11:00'],
     ['en', 'The Barber Co', 'Available times', 'SUCCESS', 'Monday', '13:00'],
     ['de', 'Friseur Müller', 'Verfügbare Termine', 'ERFOLG', 'Montag', '14:00'],
+    ['lt', 'Salonas Vilnius', 'Laisvi laikai', 'PAVYKO', 'pirmadienis', '15:00'],
   ];
   for (const [lng, bizName, availWord, okWord, mondayWord, slotTime] of cases) {
     const t2 = tenants.create({ name: bizName, language: lng, slot_minutes: 30, min_notice_hours: 2, horizon_days: 7 });
@@ -165,6 +166,17 @@ console.log('\n== multilingual tenants ==');
   check('fr first message is French', buildFirstMessage(frT).startsWith('Bonjour'));
   const badLang = tenants.create({ name: 'Weird', language: 'xx' });
   check('unknown language falls back to Dutch', buildFirstMessage(badLang).includes('Goedendag'));
+
+  const { assistantPayload } = await import('../src/vapi.js');
+  const ltT = tenants.create({ name: 'Salonas LT', language: 'lt' });
+  const ltP = assistantPayload(ltT);
+  check('lt uses eleven_v3 voice', ltP.voice.model === 'eleven_v3', ltP.voice.model);
+  check('lt transcribes with nova-3/lt', ltP.transcriber.model === 'nova-3' && ltP.transcriber.language === 'lt');
+  check('lt first message is Lithuanian', ltP.firstMessage.startsWith('Laba diena'), ltP.firstMessage);
+  const nlT = tenants.create({ name: 'Zaak NL', language: 'nl' });
+  const nlP = assistantPayload(nlT);
+  check('nl keeps fast multilingual_v2 voice', nlP.voice.model === 'eleven_multilingual_v2');
+  check('unknown language pipeline falls back to Dutch', assistantPayload(badLang).transcriber.language === 'nl');
 }
 
 console.log('\n== end-of-call report ==');

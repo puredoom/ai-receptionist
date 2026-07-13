@@ -2,13 +2,14 @@
 // Supported: nl (Dutch/Flemish), fr (French), en (English), de (German).
 import { utcToWall } from './slots.js';
 
-export const LANGS = ['nl', 'fr', 'en', 'de'];
+export const LANGS = ['nl', 'fr', 'en', 'de', 'lt'];
 
 const DAYS = {
   nl: { sun: 'zondag', mon: 'maandag', tue: 'dinsdag', wed: 'woensdag', thu: 'donderdag', fri: 'vrijdag', sat: 'zaterdag' },
   fr: { sun: 'dimanche', mon: 'lundi', tue: 'mardi', wed: 'mercredi', thu: 'jeudi', fri: 'vendredi', sat: 'samedi' },
   en: { sun: 'Sunday', mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday' },
   de: { sun: 'Sonntag', mon: 'Montag', tue: 'Dienstag', wed: 'Mittwoch', thu: 'Donnerstag', fri: 'Freitag', sat: 'Samstag' },
+  lt: { sun: 'sekmadienis', mon: 'pirmadienis', tue: 'antradienis', wed: 'trečiadienis', thu: 'ketvirtadienis', fri: 'penktadienis', sat: 'šeštadienis' },
 };
 
 const MONTHS = {
@@ -16,6 +17,8 @@ const MONTHS = {
   fr: ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'],
   en: ['January','February','March','April','May','June','July','August','September','October','November','December'],
   de: ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'],
+  // Lithuanian months in genitive case, as used in dates ("liepos 20 d.")
+  lt: ['sausio','vasario','kovo','balandžio','gegužės','birželio','liepos','rugpjūčio','rugsėjo','spalio','lapkričio','gruodžio'],
 };
 
 export function lang(tenant) {
@@ -35,6 +38,7 @@ export function formatSlot(ms, timeZone, l) {
     case 'fr': return `${day} ${w.d} ${month} à ${hh}:${mm}`;
     case 'en': return `${day}, ${month} ${w.d} at ${hh}:${mm}`;
     case 'de': return `${day}, ${w.d}. ${month} um ${hh}:${mm}`;
+    case 'lt': return `${day}, ${month} ${w.d} d., ${hh}:${mm}`;
     default:   return `${day} ${w.d} ${month} om ${hh}:${mm}`;
   }
 }
@@ -120,6 +124,26 @@ const STR = {
     errTechnical: 'FEHLER: es ist ein technisches Problem aufgetreten. Bieten Sie an, eine Nachricht aufzunehmen.',
     eventTitle: (name, service) => `Termin: ${name}${service ? ` — ${service}` : ''}`,
     eventDesc: { via: 'Gebucht über KI-Rezeptionist.', name: 'Name', phone: 'Telefon', service: 'Leistung', notes: 'Notizen' },
+  },
+  lt: {
+    today: (day, iso, hhmm, tz) => `Šiandien yra ${day}, ${iso}. Dabar ${hhmm} (${tz}).`,
+    available: list => `Laisvi laikai: ${list}.`,
+    noneAtAll: 'Deja, artimiausiu metu kalendoriuje nėra nė vieno laisvo laiko.',
+    noneRequested: alts => `Pageidaujamu metu laisvų laikų nėra. Artimiausi variantai: ${alts}.`,
+    errMissing: 'KLAIDA: rezervacijai būtinas vardas, data (MMMM-MM-DD) ir laikas (VV:MM).',
+    errFormat: 'KLAIDA: neteisingas datos ar laiko formatas. Naudokite MMMM-MM-DD ir VV:MM.',
+    errTooSoon: 'KLAIDA: šis laikas per anksti arba jau praėjo. Pasirinkite vėlesnį laiką.',
+    errOutsideHours: 'KLAIDA: šis laikas nepatenka į darbo valandas. Naudokite checkAvailability tinkamiems variantams.',
+    errTaken: 'KLAIDA: šis laikas ką tik buvo užimtas. Naudokite checkAvailability alternatyvoms.',
+    booked: (when, name) => `PAVYKO: vizitas patvirtintas ${when} klientui ${name}.`,
+    errNoMessage: 'KLAIDA: dar nėra žinutės, kurią būtų galima užrašyti.',
+    messageTaken: 'PAVYKO: žinutė užrašyta. Jums bus perskambinta kaip įmanoma greičiau.',
+    errUnknownTool: name => `KLAIDA: nežinoma funkcija ${name}.`,
+    errNotLinked: 'KLAIDA: konfigūracijos problema, šis numeris nesusietas su sistema. Pasiūlykite perduoti žinutę per pačią įmonę.',
+    errNoCalendar: 'KLAIDA: šios įmonės kalendorius dar neprijungtas. Priimkite žinutę su takeMessage — tai veikia.',
+    errTechnical: 'KLAIDA: įvyko techninė klaida. Pasiūlykite priimti žinutę.',
+    eventTitle: (name, service) => `Vizitas: ${name}${service ? ` — ${service}` : ''}`,
+    eventDesc: { via: 'Rezervuota per DI registratorių.', name: 'Vardas', phone: 'Telefonas', service: 'Paslauga', notes: 'Pastabos' },
   },
 };
 
