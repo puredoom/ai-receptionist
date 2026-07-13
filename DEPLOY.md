@@ -1,88 +1,75 @@
-# Commercial deployment — click-by-click
+# Deployment — status & remaining steps
 
-Goal: server running 24/7 in the cloud, real Dutch phone number, real calendars.
-Total cost to start: ~€25/month (hosting €5, number ~€5, ~€15 call credit).
+Production server: **https://ai-receptionist-production-ea41.up.railway.app**
 
-Your production secrets (already generated — paste these, don't reuse the local dev ones):
+> Never put real secrets (ADMIN_KEY, API keys) in this file or anywhere in the repo —
+> the repo history is visible to anyone if the repo is public. Secrets live only in
+> Railway → Variables and in your local `.env`.
 
-```
-ADMIN_KEY=96317798542e528ac24bf4f077109a8bde90692f531fa4c5
-VAPI_WEBHOOK_SECRET=c5169577a9896572e9745d4b5a5fcbcbad3ae99ab447f94f
-```
+## Done ✔
 
-## Step 1 — Put the code on GitHub (~10 min)
+- [x] Code on GitHub: github.com/puredoom/ai-receptionist
+- [x] Railway service deployed, public domain generated
+- [x] ADMIN_KEY set in Railway (admin API verified: rejects wrong keys)
 
-The local git repo is already initialized and committed. You only need to push it:
+## Railway variables — verify these are all set
 
-1. Go to github.com → sign in (or create account) → New repository →
-   name `ai-receptionist`, **Private** → Create.
-2. GitHub shows commands under "…or push an existing repository". In a terminal:
-   ```
-   cd C:\Users\David\Desktop\Busines\ai-receptionist
-   git remote add origin https://github.com/YOUR-USERNAME/ai-receptionist.git
-   git push -u origin main
-   ```
-   (`.env` and the database are git-ignored — secrets never leave your PC.)
+Railway → your service → Variables:
 
-## Step 2 — Host it on Railway (~15 min, ~$5/month)
+| Variable | Value |
+|---|---|
+| `ADMIN_KEY` | (your secret — already set) |
+| `VAPI_WEBHOOK_SECRET` | any long random string, you'll also never type this anywhere else |
+| `BASE_URL` | `https://ai-receptionist-production-ea41.up.railway.app` |
+| `DB_PATH` | `/data/receptionist.db` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | from step 1 below |
+| `VAPI_API_KEY` | from step 2 below |
 
-1. railway.app → Login with GitHub → New Project → **Deploy from GitHub repo** →
-   pick `ai-receptionist`. It auto-detects Node and builds.
-2. Click the service → **Variables** → add:
-   - `ADMIN_KEY` = (value above)
-   - `VAPI_WEBHOOK_SECRET` = (value above)
-   - `DB_PATH` = `/data/receptionist.db`
-   - (Google + Vapi vars come in steps 3–4)
-3. **Volume** (so bookings survive restarts): right-click the service →
-   Attach Volume → mount path `/data`.
-4. **Settings → Networking → Generate Domain**. You get something like
-   `ai-receptionist-production.up.railway.app`. Add variable:
-   - `BASE_URL` = `https://ai-receptionist-production.up.railway.app` (your actual domain, no trailing slash)
-5. Open `https://YOUR-DOMAIN` — you should see the login screen. Log in with the new ADMIN_KEY.
+Also attach a **Volume** mounted at `/data` (service → right-click → Attach Volume).
+Without it, all bookings and tenants are wiped on every redeploy.
 
-## Step 3 — Google Cloud OAuth (~15 min, free)
+## Step 1 — Google Cloud OAuth (~15 min, free)
 
 1. console.cloud.google.com → New project "ai-receptionist".
 2. APIs & Services → Library → enable **Google Calendar API**.
-3. OAuth consent screen → External → fill app name + your email → save.
-   Add yourself (and any pilot customer) under **Test users**.
+3. OAuth consent screen → External → app name + your email → save.
+   Add yourself (and pilot customers) under **Test users**.
 4. Credentials → Create credentials → **OAuth client ID** → Web application →
-   Authorized redirect URI: `https://YOUR-DOMAIN/oauth/google/callback`
-5. Copy the client ID and secret into Railway Variables:
-   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-6. Note: in "Testing" mode Google limits you to 100 test users — plenty for your first
-   customers. Before scaling past that, submit the app for verification (takes days,
-   free).
+   Authorized redirect URI (exact):
+   `https://ai-receptionist-production-ea41.up.railway.app/oauth/google/callback`
+5. Put the client ID + secret in Railway Variables (see table above).
+   Railway redeploys automatically when variables change.
 
-## Step 4 — Vapi + phone number (~15 min + KYC wait)
+## Step 2 — Vapi + phone number (~15 min + KYC wait)
 
-1. vapi.ai → sign up → Dashboard → API Keys → copy the **private key** →
-   Railway variable `VAPI_API_KEY`. Add ~$15 credit.
-2. Phone number options:
-   - **Testing now:** Vapi gives free US numbers instantly. Callable from NL (normal
-     international rates for the caller) — fine for your own testing, not for customers.
-   - **Dutch number (for real customers):** create a twilio.com account, buy a Dutch
-     number (~€5/month). Twilio requires business/address verification for NL numbers
-     (regulatory KYC — can take a few days; a KvK registration helps). Then in Vapi:
+1. vapi.ai → sign up → API Keys → copy the **private key** → Railway `VAPI_API_KEY`.
+   Add ~$15 credit.
+2. Phone number:
+   - **Test now:** free Vapi US number, callable from NL — fine for your own testing.
+   - **Dutch number (for customers):** twilio.com → buy NL number (~€5/mo; requires
+     business/address verification, can take days — KvK helps). Then Vapi →
      Phone Numbers → Import from Twilio.
-3. In YOUR dashboard (`https://YOUR-DOMAIN`): add the business → Koppel Google Agenda →
-   **Maak AI aan**. Copy the assistant ID it reports.
-4. In Vapi: Phone Numbers → your number → set **Assistant** to that assistant.
-5. Call the number. Test like a difficult customer (see SETUP.md step 5).
+3. Dashboard (`https://ai-receptionist-production-ea41.up.railway.app`, log in with your
+   ADMIN_KEY): add business → **Koppel Google Agenda** → **Maak AI aan**.
+4. Vapi → Phone Numbers → your number → Assistant = the ID from step 3.
+5. Call it. Test hard: relative dates ("morgen", "volgende week dinsdag"), a fully
+   blocked day, interrupting it, "spreek ik met een mens?", a price it can't know.
+6. After each call: check Google Calendar + dashboard tabs (Afspraken / Berichten /
+   Gesprekken).
 
-## Step 5 — Before you charge real customers
+## Before charging customers
 
-- [ ] Full test cycle with YOUR OWN business entry for a week (real calls, real agenda).
-- [ ] KvK registration if you don't have one (you're selling a B2B service).
-- [ ] One-page verwerkersovereenkomst (data processing agreement) per customer — standard
-      Dutch templates exist; callers' names/numbers flow through your server.
-- [ ] Tell customers to mention the AI assistant in their own privacy statement.
-- [ ] Pricing: €79–99/month incl. ~150 call-minutes is a defensible starter offer;
-      your marginal cost is ~€0.10–0.18/minute.
-- [ ] Onboard pilot customer #1 at a discount in exchange for feedback + testimonial.
+- [ ] Run it on your own line for a week of real calls.
+- [ ] KvK registration (B2B service).
+- [ ] Verwerkersovereenkomst (standard NL template) per customer — caller data flows
+      through your server.
+- [ ] Customers mention the AI assistant in their privacy statement.
+- [ ] Pricing: €79–99/month incl. ~150 minutes is defensible; marginal cost
+      ~€0.10–0.18/min.
+- [ ] Pilot customer #1 at a discount for feedback + testimonial.
 
-## Updating the software later
+## Updating the software
 
-Any change: commit + push to GitHub → Railway redeploys automatically.
-If `BASE_URL` or prompts change, click **"Update AI"** per business in the dashboard so
-the assistants get the new config.
+Commit + push to GitHub → Railway redeploys automatically.
+If `BASE_URL`, prompts, or tools change: dashboard → **Update AI** per business, so each
+Vapi assistant picks up the new config.
