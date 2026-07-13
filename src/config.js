@@ -16,9 +16,18 @@ if (fs.existsSync(envPath)) {
   }
 }
 
+function normalizeBaseUrl(raw) {
+  let url = (raw || 'http://localhost:3000').trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(url)) {
+    // bare domains get https://, except localhost which is plain http
+    url = (/^(localhost|127\.0\.0\.1)([:/]|$)/.test(url) ? 'http://' : 'https://') + url;
+  }
+  return url;
+}
+
 export const cfg = {
   port: Number(process.env.PORT || 3000),
-  baseUrl: (process.env.BASE_URL || 'http://localhost:3000').replace(/\/$/, ''),
+  baseUrl: normalizeBaseUrl(process.env.BASE_URL),
   adminKey: process.env.ADMIN_KEY || '',
   vapiApiKey: process.env.VAPI_API_KEY || '',
   vapiWebhookSecret: process.env.VAPI_WEBHOOK_SECRET || '',
