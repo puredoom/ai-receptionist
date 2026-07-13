@@ -135,7 +135,7 @@ async function createTenant() {
 async function provision(id) {
   try {
     const r = await api(`/api/tenants/${id}/provision`, { method: 'POST' });
-    alert('AI-assistent klaar: ' + r.assistantId + '\\nKoppel dit assistant-ID aan een telefoonnummer in het Vapi-dashboard.');
+    alert('AI-assistent klaar: ' + r.assistantId + '\nKoppel dit assistant-ID aan een telefoonnummer in het Vapi-dashboard.');
     loadTenants();
   } catch (e) { alert('Fout: ' + e.message); }
 }
