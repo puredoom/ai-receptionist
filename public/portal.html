@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Klantportaal — AI Receptionist</title>
+<style>
+  :root {
+    --navy:#1f3864; --navy2:#2a4a82; --bg:#f4f6fb; --card:#fff; --line:#e3e8f2;
+    --green:#2e7d4f; --green-bg:#e7f4ec; --amber:#8a6d00; --amber-bg:#fff6d9;
+    --text:#1c2333; --muted:#6b7487;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.6 -apple-system, "Segoe UI", system-ui, sans-serif; background:var(--bg); color:var(--text); }
+  .hero { background:linear-gradient(135deg, var(--navy) 0%, var(--navy2) 60%, #38609f 100%); color:#fff; padding:36px 20px 84px; }
+  .hero .inner { max-width:960px; margin:0 auto; }
+  .hero .brand { font-size:12px; letter-spacing:.12em; text-transform:uppercase; opacity:.75; }
+  .hero h1 { margin:6px 0 4px; font-size:28px; font-weight:700; }
+  .hero .sub { opacity:.85; font-size:14px; }
+  .chips { margin-top:14px; display:flex; gap:8px; flex-wrap:wrap; }
+  .chip { background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.25); border-radius:99px; padding:4px 14px; font-size:13px; }
+  main { max-width:960px; margin:-56px auto 40px; padding:0 20px; display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  @media (max-width:760px){ main { grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 22px; box-shadow:0 8px 24px rgba(31,56,100,.06); }
+  .card.wide { grid-column:1 / -1; }
+  h2 { margin:0 0 14px; font-size:16px; color:var(--navy); display:flex; align-items:center; gap:8px; }
+  h2 .ico { font-size:18px; }
+  .item { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); }
+  .item:last-child { border-bottom:none; }
+  .item b { font-size:14px; }
+  .muted { color:var(--muted); font-size:13px; }
+  .when { color:var(--navy); font-weight:600; font-size:13px; }
+  .empty { color:var(--muted); font-size:14px; padding:8px 0; }
+  button { background:var(--navy); color:#fff; border:0; border-radius:8px; padding:8px 14px; cursor:pointer; font:inherit; font-size:13px; }
+  button.ghost { background:#fff; color:#b3382c; border:1px solid #e5c4c0; }
+  button.ghost:hover { background:#fdf2f0; }
+  label { display:block; font-size:12px; color:var(--muted); margin:10px 0 3px; }
+  input { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; font:inherit; }
+  .row { display:flex; gap:10px; }
+  .row > div { flex:1; }
+  .pill { display:inline-block; padding:2px 10px; border-radius:99px; font-size:12px; font-weight:600; }
+  .pill.ok { background:var(--green-bg); color:var(--green); }
+  .pill.warn { background:var(--amber-bg); color:var(--amber); }
+  .note { background:#f0f4fb; border-radius:10px; padding:10px 14px; font-size:13px; color:#41506b; margin-top:10px; word-break:break-all; }
+  .msg { font-size:14px; }
+  pre { white-space:pre-wrap; font-size:13px; color:#3a4358; margin:6px 0 0; font-family:inherit; }
+  footer { text-align:center; color:var(--muted); font-size:12px; padding:20px; }
+  .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--navy); color:#fff; padding:10px 20px; border-radius:10px; font-size:14px; opacity:0; transition:opacity .3s; pointer-events:none; }
+  .toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<div class="hero"><div class="inner">
+  <div class="brand">Klantportaal</div>
+  <h1 id="bizName">…</h1>
+  <div class="sub">Uw telefonische AI-assistent — afspraken, berichten en agenda op één plek.</div>
+  <div class="chips" id="chips"></div>
+</div></div>
+
+<main id="main" style="display:none">
+  <div class="card wide">
+    <h2><span class="ico">📅</span> Komende afspraken</h2>
+    <div id="upcoming"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="ico">💬</span> Berichten van bellers</h2>
+    <div id="messages"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="ico">📞</span> Recente gesprekken</h2>
+    <div id="calls"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="ico">🚫</span> Tijd blokkeren</h2>
+    <p class="muted" style="margin-top:0">Vakantie, pauze of privé-afspraak? Blokkeer de tijd, dan plant de assistent er niets in.</p>
+    <div class="row">
+      <div><label>Datum</label><input id="b_date" type="date"></div>
+      <div><label>Van</label><input id="b_from" type="time" value="09:00"></div>
+      <div><label>Tot</label><input id="b_to" type="time" value="17:00"></div>
+    </div>
+    <label>Reden (optioneel)</label><input id="b_reason" placeholder="Vakantie">
+    <p><button onclick="addBlock()">Blokkeren</button></p>
+    <div id="blocks"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="ico">🔗</span> Agenda koppelen</h2>
+    <p class="muted" style="margin-top:0"><b>Afspraken in uw eigen agenda zien?</b> Abonneer u op deze link (Google/Outlook/Apple: "agenda toevoegen via URL"):</p>
+    <div class="note" id="feedUrl"></div>
+    <p class="muted"><b>Heeft u al een agenda?</b> Plak hier de geheime iCal/ICS-link van uw agenda — de assistent houdt dan ook rekening met die afspraken:</p>
+    <input id="icsUrl" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">
+    <p><button onclick="saveIcs()">Opslaan</button> <span class="muted" id="icsMsg"></span></p>
+  </div>
+</main>
+<footer>Beveiligde pagina — deel deze link niet. Vragen? Neem contact op met uw leverancier.</footer>
+<div class="toast" id="toast"></div>
+
+<script>
+const token = location.pathname.split('/')[2];
+const base = `/portal/${token}/api`;
+
+const DAYS_NL = { mon:'ma', tue:'di', wed:'wo', thu:'do', fri:'vr', sat:'za', sun:'zo' };
+
+function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function fmt(ms){ return new Date(ms).toLocaleString('nl-BE', { weekday:'short', day:'numeric', month:'long', hour:'2-digit', minute:'2-digit' }); }
+function toast(t){ const el = document.getElementById('toast'); el.textContent = t; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'), 2500); }
+
+async function api(path, opts={}) {
+  const res = await fetch(base + path, { headers:{'Content-Type':'application/json'}, ...opts });
+  const data = await res.json().catch(()=>({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+async function load() {
+  const d = await api('/overview');
+  const b = d.business;
+  document.getElementById('bizName').textContent = b.name;
+  document.title = b.name + ' — Klantportaal';
+  document.getElementById('chips').innerHTML =
+    `<span class="chip">${b.ai_active ? '🟢 AI-assistent actief' : '🟠 AI-assistent nog niet actief'}</span>` +
+    `<span class="chip">📅 ${d.upcoming.length} komende afspra${d.upcoming.length === 1 ? 'ak' : 'ken'}</span>` +
+    `<span class="chip">🗓 ${b.calendar_mode === 'google' ? 'Google Agenda' : 'Ingebouwde agenda'}</span>` +
+    `<span class="chip">🌐 ${b.language.toUpperCase()}</span>`;
+
+  document.getElementById('upcoming').innerHTML = d.upcoming.length ? d.upcoming.map(x => `
+    <div class="item">
+      <div><div class="when">${fmt(x.start_utc)}</div>
+        <b>${esc(x.customer_name)}</b> ${x.service ? '· ' + esc(x.service) : ''}<br>
+        <span class="muted">${esc(x.customer_phone)}</span></div>
+      <button class="ghost" onclick="cancelBooking(${x.id})">Annuleren</button>
+    </div>`).join('') : '<div class="empty">Nog geen komende afspraken. Zodra de assistent er een inplant, ziet u die hier direct.</div>';
+
+  document.getElementById('messages').innerHTML = d.messages.length ? d.messages.map(m => `
+    <div class="item"><div class="msg"><b>${esc(m.customer_name || 'Onbekend')}</b> <span class="muted">${esc(m.customer_phone)} · ${new Date(m.created_at*1000).toLocaleString('nl-BE')}</span>
+    <pre>${esc(m.message)}</pre></div></div>`).join('') : '<div class="empty">Geen berichten.</div>';
+
+  document.getElementById('calls').innerHTML = d.calls.length ? d.calls.map(c => `
+    <div class="item"><div class="msg"><span class="when">${new Date(c.created_at*1000).toLocaleString('nl-BE')}</span>
+    <pre>${esc(c.summary || '(geen samenvatting)')}</pre></div></div>`).join('') : '<div class="empty">Nog geen gesprekken.</div>';
+
+  document.getElementById('blocks').innerHTML = d.blocks.length ? d.blocks.map(bl => `
+    <div class="item"><div><span class="when">${fmt(bl.start_utc)} → ${new Date(bl.end_utc).toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'})}</span><br>
+    <span class="muted">${esc(bl.reason || 'Geblokkeerd')}</span></div>
+    <button class="ghost" onclick="delBlock(${bl.id})">Verwijderen</button></div>`).join('') : '';
+
+  document.getElementById('feedUrl').textContent = location.origin + `/portal/${token}/calendar.ics`;
+  document.getElementById('icsUrl').value = b.ics_import_url || '';
+  document.getElementById('main').style.display = '';
+}
+
+async function cancelBooking(id) {
+  if (!confirm('Deze afspraak annuleren? Vergeet de klant niet te verwittigen.')) return;
+  await api(`/bookings/${id}/cancel`, { method:'POST' });
+  toast('Afspraak geannuleerd'); load();
+}
+
+async function addBlock() {
+  try {
+    await api('/blocks', { method:'POST', body: JSON.stringify({
+      date: document.getElementById('b_date').value,
+      from: document.getElementById('b_from').value,
+      to: document.getElementById('b_to').value,
+      reason: document.getElementById('b_reason').value,
+    })});
+    toast('Tijd geblokkeerd'); load();
+  } catch (e) { toast('Fout: ' + e.message); }
+}
+
+async function delBlock(id) {
+  await api(`/blocks/${id}`, { method:'DELETE' });
+  toast('Blokkering verwijderd'); load();
+}
+
+async function saveIcs() {
+  try {
+    await api('/settings', { method:'POST', body: JSON.stringify({ ics_import_url: document.getElementById('icsUrl').value }) });
+    document.getElementById('icsMsg').textContent = 'Opgeslagen ✔';
+    toast('Agenda-koppeling opgeslagen');
+  } catch (e) { document.getElementById('icsMsg').textContent = 'Fout: ' + e.message; }
+}
+
+load().catch(e => { document.getElementById('bizName').textContent = 'Fout: ' + e.message; });
+</script>
+</body>
+</html>

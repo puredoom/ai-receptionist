@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { cfg } from './config.js';
@@ -58,6 +59,24 @@ CREATE TABLE IF NOT EXISTS oauth_states (
   tenant_id INTEGER NOT NULL,
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
+CREATE TABLE IF NOT EXISTS blocks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tenant_id INTEGER NOT NULL,
+  start_utc INTEGER NOT NULL,
+  end_utc INTEGER NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+CREATE TABLE IF NOT EXISTS leads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL DEFAULT '',
+  business TEXT NOT NULL DEFAULT '',
+  email TEXT NOT NULL DEFAULT '',
+  phone TEXT NOT NULL DEFAULT '',
+  message TEXT NOT NULL DEFAULT '',
+  plan TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
 `);
 
 // migrations for databases created before these columns existed
@@ -66,20 +85,36 @@ CREATE TABLE IF NOT EXISTS oauth_states (
   if (!cols.includes('language')) {
     db.exec("ALTER TABLE tenants ADD COLUMN language TEXT NOT NULL DEFAULT 'nl'");
   }
+  if (!cols.includes('calendar_mode')) {
+    // existing tenants with a Google connection keep it; everyone else gets the built-in agenda
+    db.exec("ALTER TABLE tenants ADD COLUMN calendar_mode TEXT NOT NULL DEFAULT 'internal'");
+    db.exec("UPDATE tenants SET calendar_mode = 'google' WHERE google_refresh_token IS NOT NULL");
+  }
+  if (!cols.includes('ics_import_url')) {
+    db.exec("ALTER TABLE tenants ADD COLUMN ics_import_url TEXT NOT NULL DEFAULT ''");
+  }
+  if (!cols.includes('portal_token')) {
+    db.exec('ALTER TABLE tenants ADD COLUMN portal_token TEXT');
+  }
+  for (const t of db.prepare('SELECT id FROM tenants WHERE portal_token IS NULL').all()) {
+    db.prepare('UPDATE tenants SET portal_token = ? WHERE id = ?')
+      .run(crypto.randomBytes(16).toString('hex'), t.id);
+  }
 }
 
 export const tenants = {
   create(t) {
     const stmt = db.prepare(
       `INSERT INTO tenants (name, timezone, opening_hours, slot_minutes, min_notice_hours,
-        horizon_days, services, extra_info, language, formality, voice_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+        horizon_days, services, extra_info, language, formality, voice_id, calendar_mode, portal_token)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
     );
     const r = stmt.run(
       t.name, t.timezone || 'Europe/Brussels',
       t.opening_hours || defaultHours(),
       t.slot_minutes ?? 30, t.min_notice_hours ?? 2, t.horizon_days ?? 14,
-      t.services ?? '', t.extra_info ?? '', t.language ?? 'nl', t.formality ?? 'u', t.voice_id ?? ''
+      t.services ?? '', t.extra_info ?? '', t.language ?? 'nl', t.formality ?? 'u', t.voice_id ?? '',
+      t.calendar_mode ?? 'internal', crypto.randomBytes(16).toString('hex')
     );
     return this.get(Number(r.lastInsertRowid));
   },
@@ -87,11 +122,15 @@ export const tenants = {
   byAssistant(assistantId) {
     return db.prepare('SELECT * FROM tenants WHERE vapi_assistant_id = ?').get(assistantId);
   },
+  byPortalToken(token) {
+    return db.prepare('SELECT * FROM tenants WHERE portal_token = ?').get(token);
+  },
   list() { return db.prepare('SELECT * FROM tenants ORDER BY id').all(); },
   update(id, fields) {
     const allowed = ['name','timezone','opening_hours','slot_minutes','min_notice_hours',
       'horizon_days','services','extra_info','language','formality','voice_id',
-      'google_refresh_token','google_calendar_id','vapi_assistant_id'];
+      'google_refresh_token','google_calendar_id','vapi_assistant_id',
+      'calendar_mode','ics_import_url'];
     const keys = Object.keys(fields).filter(k => allowed.includes(k));
     if (!keys.length) return this.get(id);
     const sql = `UPDATE tenants SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`;
@@ -118,6 +157,43 @@ export const bookings = {
   forTenant(tenantId) {
     return db.prepare('SELECT * FROM bookings WHERE tenant_id = ? ORDER BY start_utc DESC LIMIT 200').all(tenantId);
   },
+  get(id) { return db.prepare('SELECT * FROM bookings WHERE id = ?').get(id); },
+  remove(id) { db.prepare('DELETE FROM bookings WHERE id = ?').run(id); },
+  overlapping(tenantId, fromMs, toMs) {
+    return db.prepare(
+      'SELECT * FROM bookings WHERE tenant_id = ? AND start_utc < ? AND end_utc > ?'
+    ).all(tenantId, toMs, fromMs);
+  },
+};
+
+export const blocks = {
+  create(b) {
+    const r = db.prepare(
+      'INSERT INTO blocks (tenant_id, start_utc, end_utc, reason) VALUES (?,?,?,?)'
+    ).run(b.tenant_id, b.start_utc, b.end_utc, b.reason ?? '');
+    return Number(r.lastInsertRowid);
+  },
+  forTenant(tenantId) {
+    return db.prepare('SELECT * FROM blocks WHERE tenant_id = ? ORDER BY start_utc DESC LIMIT 200').all(tenantId);
+  },
+  overlapping(tenantId, fromMs, toMs) {
+    return db.prepare(
+      'SELECT * FROM blocks WHERE tenant_id = ? AND start_utc < ? AND end_utc > ?'
+    ).all(tenantId, toMs, fromMs);
+  },
+  remove(id, tenantId) {
+    db.prepare('DELETE FROM blocks WHERE id = ? AND tenant_id = ?').run(id, tenantId);
+  },
+};
+
+export const leads = {
+  create(l) {
+    const r = db.prepare(
+      'INSERT INTO leads (name, business, email, phone, message, plan) VALUES (?,?,?,?,?,?)'
+    ).run(l.name ?? '', l.business ?? '', l.email ?? '', l.phone ?? '', l.message ?? '', l.plan ?? '');
+    return Number(r.lastInsertRowid);
+  },
+  list() { return db.prepare('SELECT * FROM leads ORDER BY id DESC LIMIT 500').all(); },
 };
 
 export const messages = {

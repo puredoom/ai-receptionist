@@ -179,6 +179,53 @@ console.log('\n== multilingual tenants ==');
   check('unknown language pipeline falls back to Dutch', assistantPayload(badLang).transcriber.language === 'nl');
 }
 
+console.log('\n== internal calendar (no Google) ==');
+{
+  const { calendarApi } = await import('../src/calendar.js');
+  const { blocks } = await import('../src/db.js');
+  const intT = tenants.create({ name: 'Zonder Google BV', calendar_mode: 'internal',
+    slot_minutes: 30, min_notice_hours: 2, horizon_days: 7 });
+  tenants.update(intT.id, { vapi_assistant_id: 'asst_internal' });
+  check('new tenant defaults to internal mode', tenants.get(intT.id).calendar_mode === 'internal');
+  check('tenant gets a portal token', /^[0-9a-f]{32}$/.test(tenants.get(intT.id).portal_token));
+
+  // book via the REAL calendar router (internal path: db only, no network)
+  const handleInt = createWebhookHandler(calendarApi, () => NOW);
+  const callInt = async (tool, args) => {
+    const res = fakeRes();
+    await handleInt({ headers: { 'x-vapi-secret': 'test-secret' }, body: { message: {
+      type: 'tool-calls', call: { assistantId: 'asst_internal' },
+      toolCallList: [{ id: 't', function: { name: tool, arguments: JSON.stringify(args) } }],
+    } } }, res);
+    return res.body.results[0].result;
+  };
+  const r1 = await callInt('bookAppointment', { name: 'Jos Peeters', phone: '0470000001', date: '2026-07-16', time: '10:00' });
+  check('internal booking succeeds without Google', r1.startsWith('GELUKT'), r1);
+  const r2 = await callInt('bookAppointment', { name: 'Ander', phone: '0470000002', date: '2026-07-16', time: '10:00' });
+  check('internal double-booking rejected', r2.includes('bezet'), r2);
+
+  blocks.create({
+    tenant_id: intT.id,
+    start_utc: wallToUtc(2026, 7, 17, 9, 0, TZ),
+    end_utc: wallToUtc(2026, 7, 17, 17, 0, TZ),
+    reason: 'Vakantie',
+  });
+  const r3 = await callInt('checkAvailability', { date: '2026-07-17' });
+  check('blocked day shows no slots', r3.includes('niets vrij'), r3);
+
+  const { buildIcsFeed, parseIcsBusy } = await import('../src/ics.js');
+  const feed = buildIcsFeed(tenants.get(intT.id),
+    (await import('../src/db.js')).bookings.forTenant(intT.id),
+    blocks.forTenant(intT.id));
+  check('ICS export contains booking and block', feed.includes('Jos Peeters') && feed.includes('Vakantie'));
+  const parsed = parseIcsBusy(feed);
+  check('exported ICS parses back to busy intervals', parsed.length === 2, String(parsed.length));
+
+  const ics = 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART:20260720T080000Z\r\nDTEND:20260720T090000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
+  const busy = parseIcsBusy(ics);
+  check('external ICS with Z-times parses', busy.length === 1 && busy[0].end - busy[0].start === 3_600_000);
+}
+
 console.log('\n== end-of-call report ==');
 {
   const res = fakeRes();

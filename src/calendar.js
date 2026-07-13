@@ -61,9 +61,31 @@ async function accessToken(tenant) {
   return data.access_token;
 }
 
+// ---------- internal (built-in) agenda: bookings + blocks + optional ICS import ----------
+import { bookings, blocks } from './db.js';
+import { fetchIcsBusy } from './ics.js';
+
+async function internalBusy(tenant, fromMs, toMs) {
+  const busy = [
+    ...bookings.overlapping(tenant.id, fromMs, toMs).map(b => ({ start: b.start_utc, end: b.end_utc })),
+    ...blocks.overlapping(tenant.id, fromMs, toMs).map(b => ({ start: b.start_utc, end: b.end_utc })),
+  ];
+  if (tenant.ics_import_url) {
+    try {
+      const feed = await fetchIcsBusy(tenant.ics_import_url);
+      busy.push(...feed.filter(e => e.start < toMs && e.end > fromMs));
+    } catch (err) {
+      // an unreachable feed must not break live calls; log and continue with what we have
+      console.error(`ICS import failed for tenant ${tenant.id}:`, err.message);
+    }
+  }
+  return busy;
+}
+
 export const calendarApi = {
   /** Busy intervals [{start, end}] in UTC ms between two timestamps. */
   async getBusy(tenant, fromMs, toMs) {
+    if (tenant.calendar_mode !== 'google') return internalBusy(tenant, fromMs, toMs);
     const token = await accessToken(tenant);
     const res = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
       method: 'POST',
@@ -83,8 +105,9 @@ export const calendarApi = {
     }));
   },
 
-  /** Create an event; returns the Google event id. */
+  /** Create an event; returns the Google event id (null in internal mode — the booking row is the source of truth). */
   async createEvent(tenant, { summary, description, startMs, endMs }) {
+    if (tenant.calendar_mode !== 'google') return null;
     const token = await accessToken(tenant);
     const calId = encodeURIComponent(tenant.google_calendar_id || 'primary');
     const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/events`, {
@@ -99,6 +122,17 @@ export const calendarApi = {
     });
     if (!res.ok) throw new Error(`event insert failed: ${res.status} ${await res.text()}`);
     return (await res.json()).id;
+  },
+
+  /** Delete an event (used when a booking is cancelled in google mode). Best effort. */
+  async deleteEvent(tenant, eventId) {
+    if (tenant.calendar_mode !== 'google' || !eventId) return;
+    const token = await accessToken(tenant);
+    const calId = encodeURIComponent(tenant.google_calendar_id || 'primary');
+    await fetch(`https://www.googleapis.com/calendar/v3/calendars/${calId}/events/${encodeURIComponent(eventId)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
   },
 };
 

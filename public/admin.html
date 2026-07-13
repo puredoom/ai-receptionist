@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Receptionist — Admin</title>
+<style>
+  :root { --navy:#1f3864; --bg:#f5f7fb; --card:#fff; --line:#dde3ee; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.5 system-ui, sans-serif; background:var(--bg); color:#222; }
+  header { background:var(--navy); color:#fff; padding:14px 24px; display:flex; justify-content:space-between; align-items:center; }
+  header h1 { font-size:16px; margin:0; }
+  main { max-width:1080px; margin:24px auto; padding:0 16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px 20px; margin-bottom:16px; }
+  h2 { font-size:15px; margin:0 0 12px; color:var(--navy); }
+  label { display:block; font-size:12px; color:#555; margin:8px 0 2px; }
+  input, textarea, select { width:100%; padding:7px 9px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+  textarea { min-height:60px; }
+  button { background:var(--navy); color:#fff; border:0; border-radius:6px; padding:8px 14px; cursor:pointer; font:inherit; }
+  button.secondary { background:#fff; color:var(--navy); border:1px solid var(--navy); }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  .row > div { flex:1; min-width:170px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:99px; font-size:11px; }
+  .ok { background:#e2efda; color:#375623; } .warn { background:#fff2cc; color:#7f6000; }
+  .muted { color:#888; font-size:12px; }
+  #login { max-width:420px; margin:80px auto; }
+  .tabs { display:flex; gap:8px; margin-bottom:10px; }
+  .tabs button { background:#fff; color:var(--navy); border:1px solid var(--line); }
+  .tabs button.active { background:var(--navy); color:#fff; }
+  pre { white-space:pre-wrap; font-size:12px; }
+  .linkbtn { background:none; border:none; color:var(--navy); text-decoration:underline; cursor:pointer; padding:0; font-size:12px; }
+</style>
+</head>
+<body>
+<header><h1>AI Receptionist — Admin</h1><a href="/" style="color:#cdd8ee;font-size:12px">→ site</a></header>
+<main>
+  <div id="login" class="card">
+    <h2>Inloggen</h2>
+    <label>Admin key</label>
+    <input id="key" type="password" autocomplete="off">
+    <p><button onclick="login()">Inloggen</button></p>
+    <p class="muted" id="loginMsg"></p>
+  </div>
+
+  <div id="app" style="display:none">
+    <div class="card">
+      <h2>Leads <span class="muted" id="leadCount"></span></h2>
+      <div id="leadList" class="muted">Laden…</div>
+    </div>
+
+    <div class="card">
+      <h2>Nieuw bedrijf toevoegen</h2>
+      <div class="row">
+        <div><label>Bedrijfsnaam *</label><input id="t_name" placeholder="Kapsalon De Schaar"></div>
+        <div><label>Diensten (voor de AI)</label><input id="t_services" placeholder="knippen, kleuren, baard trimmen"></div>
+        <div><label>Afspraakduur (min)</label><input id="t_slot" type="number" value="30"></div>
+        <div><label>Taal</label><select id="t_lang">
+          <option value="nl">Nederlands</option>
+          <option value="fr">Français</option>
+          <option value="en">English</option>
+          <option value="de">Deutsch</option>
+          <option value="lt">Lietuvių</option>
+        </select></div>
+        <div><label>Aanspreekvorm</label><select id="t_formality"><option value="u">formeel (u / vous / Sie)</option><option value="je">informeel (je / tu / du)</option></select></div>
+      </div>
+      <label>Openingstijden (JSON — dag: lijst van [start, eind])</label>
+      <textarea id="t_hours">{"mon":[["09:00","17:00"]],"tue":[["09:00","17:00"]],"wed":[["09:00","17:00"]],"thu":[["09:00","17:00"]],"fri":[["09:00","17:00"]],"sat":[],"sun":[]}</textarea>
+      <label>Extra info voor de AI (adres, prijzen, parkeren…)</label>
+      <textarea id="t_extra"></textarea>
+      <p><button onclick="createTenant()">Toevoegen</button> <span id="createMsg" class="muted"></span></p>
+      <p class="muted">Nieuwe bedrijven gebruiken standaard de <b>ingebouwde agenda</b> — geen Google nodig. Google koppelen kan altijd nog.</p>
+    </div>
+
+    <div class="card">
+      <h2>Bedrijven</h2>
+      <div id="tenantList"></div>
+    </div>
+
+    <div class="card" id="detailCard" style="display:none">
+      <h2 id="detailTitle"></h2>
+      <div class="tabs">
+        <button data-tab="bookings" class="active" onclick="showTab(this)">Afspraken</button>
+        <button data-tab="messages" onclick="showTab(this)">Berichten</button>
+        <button data-tab="calls" onclick="showTab(this)">Gesprekken</button>
+        <button data-tab="availability" onclick="showTab(this)">Beschikbaarheid</button>
+      </div>
+      <div id="detailBody"></div>
+    </div>
+  </div>
+</main>
+<script>
+let KEY = localStorage.getItem('adminKey') || '';
+let currentTenant = null;
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', 'x-admin-key': KEY, ...(opts.headers||{}) } });
+  if (!res.ok) throw new Error((await res.json().catch(()=>({}))).error || res.statusText);
+  return res.json();
+}
+
+async function login() {
+  KEY = document.getElementById('key').value.trim() || KEY;
+  try {
+    await api('/api/tenants');
+    localStorage.setItem('adminKey', KEY);
+    document.getElementById('login').style.display = 'none';
+    document.getElementById('app').style.display = '';
+    loadTenants(); loadLeads();
+  } catch (e) {
+    document.getElementById('loginMsg').textContent = 'Onjuiste key (' + e.message + ')';
+  }
+}
+
+async function loadLeads() {
+  try {
+    const rows = await api('/api/leads');
+    document.getElementById('leadCount').textContent = rows.length ? `(${rows.length})` : '';
+    document.getElementById('leadList').innerHTML = rows.length
+      ? '<table><tr><th>Wanneer</th><th>Naam</th><th>Bedrijf</th><th>Contact</th><th>Plan</th><th>Bericht</th></tr>' +
+        rows.slice(0, 20).map(l => `<tr><td>${new Date(l.created_at*1000).toLocaleString('nl-BE')}</td><td>${esc(l.name)}</td><td>${esc(l.business)}</td><td>${esc(l.email)}<br>${esc(l.phone)}</td><td>${esc(l.plan)}</td><td>${esc(l.message)}</td></tr>`).join('') + '</table>'
+      : '<p class="muted">Nog geen leads. Zodra iemand het formulier op de site invult, verschijnt die hier.</p>';
+  } catch (e) { document.getElementById('leadList').textContent = 'Fout: ' + e.message; }
+}
+
+async function loadTenants() {
+  const list = await api('/api/tenants');
+  const el = document.getElementById('tenantList');
+  if (!list.length) { el.innerHTML = '<p class="muted">Nog geen bedrijven.</p>'; return; }
+  el.innerHTML = '<table><tr><th>Bedrijf</th><th>Agenda</th><th>AI-assistent</th><th>Klantportaal</th><th></th></tr>' +
+    list.map(t => `<tr>
+      <td><b>${esc(t.name)}</b> <span class="pill ok">${esc((t.language||'nl').toUpperCase())}</span><br><span class="muted">${esc(t.services||'')}</span></td>
+      <td>${t.calendar_mode === 'google'
+            ? (t.google_connected ? '<span class="pill ok">Google gekoppeld</span>' : `<span class="pill warn">Google, niet gekoppeld</span><br><a href="/oauth/google/start?tenant=${t.id}&key=${encodeURIComponent(KEY)}">Koppel Google Agenda</a>`)
+            : '<span class="pill ok">ingebouwde agenda</span>'}</td>
+      <td>${t.vapi_assistant_id ? '<span class="pill ok">actief</span>' : '<span class="pill warn">nog niet aangemaakt</span>'}</td>
+      <td><button class="linkbtn" onclick="copyPortal('${esc(t.portal_url)}')">kopieer link</button><br>
+          <a class="muted" href="${esc(t.portal_url)}" target="_blank">openen ↗</a></td>
+      <td>
+        <button class="secondary" onclick="provision(${t.id})">${t.vapi_assistant_id ? 'Update AI' : 'Maak AI aan'}</button>
+        <button class="secondary" onclick="openDetail(${t.id}, '${esc(t.name)}')">Details</button>
+      </td>
+    </tr>`).join('') + '</table>';
+}
+
+function copyPortal(url) {
+  navigator.clipboard.writeText(url).then(() => alert('Portal-link gekopieerd:\n' + url + '\n\nStuur deze privé naar de klant.'));
+}
+
+async function createTenant() {
+  const msg = document.getElementById('createMsg');
+  msg.textContent = '…';
+  try {
+    await api('/api/tenants', { method: 'POST', body: JSON.stringify({
+      name: val('t_name'), services: val('t_services'),
+      slot_minutes: Number(val('t_slot')) || 30,
+      language: val('t_lang'),
+      formality: val('t_formality'),
+      opening_hours: val('t_hours'),
+      extra_info: val('t_extra'),
+    })});
+    msg.textContent = 'Toegevoegd ✔';
+    loadTenants();
+  } catch (e) { msg.textContent = 'Fout: ' + e.message; }
+}
+
+async function provision(id) {
+  try {
+    const r = await api(`/api/tenants/${id}/provision`, { method: 'POST' });
+    alert('AI-assistent klaar: ' + r.assistantId + '\nKoppel dit assistant-ID aan een telefoonnummer in het Vapi-dashboard.');
+    loadTenants();
+  } catch (e) { alert('Fout: ' + e.message); }
+}
+
+async function openDetail(id, name) {
+  currentTenant = id;
+  document.getElementById('detailCard').style.display = '';
+  document.getElementById('detailTitle').textContent = name;
+  showTab(document.querySelector('.tabs button'));
+}
+
+async function showTab(btn) {
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b === btn));
+  const tab = btn.dataset.tab;
+  const body = document.getElementById('detailBody');
+  body.innerHTML = '<p class="muted">Laden…</p>';
+  try {
+    if (tab === 'availability') {
+      const slots = await api(`/api/tenants/${currentTenant}/availability`);
+      body.innerHTML = slots.length
+        ? '<ul>' + slots.map(s => `<li>${esc(s.label)}</li>`).join('') + '</ul>'
+        : '<p class="muted">Geen vrije plekken.</p>';
+      return;
+    }
+    const rows = await api(`/api/tenants/${currentTenant}/${tab}`);
+    if (!rows.length) { body.innerHTML = '<p class="muted">Nog niets.</p>'; return; }
+    if (tab === 'bookings') {
+      body.innerHTML = '<table><tr><th>Wanneer</th><th>Klant</th><th>Telefoon</th><th>Dienst</th></tr>' +
+        rows.map(r => `<tr><td>${new Date(r.start_utc).toLocaleString('nl-BE')}</td><td>${esc(r.customer_name)}</td><td>${esc(r.customer_phone)}</td><td>${esc(r.service)}</td></tr>`).join('') + '</table>';
+    } else if (tab === 'messages') {
+      body.innerHTML = '<table><tr><th>Van</th><th>Telefoon</th><th>Bericht</th><th>Ontvangen</th></tr>' +
+        rows.map(r => `<tr><td>${esc(r.customer_name)}</td><td>${esc(r.customer_phone)}</td><td>${esc(r.message)}</td><td>${new Date(r.created_at*1000).toLocaleString('nl-BE')}</td></tr>`).join('') + '</table>';
+    } else {
+      body.innerHTML = rows.map(r => `<div style="border-bottom:1px solid var(--line);padding:8px 0">
+        <b>${new Date(r.created_at*1000).toLocaleString('nl-BE')}</b> <span class="muted">${esc(r.ended_reason||'')}</span>
+        <pre>${esc(r.summary || r.transcript || '(geen samenvatting)')}</pre></div>`).join('');
+    }
+  } catch (e) { body.innerHTML = '<p class="muted">Fout: ' + esc(e.message) + '</p>'; }
+}
+
+function val(id) { return document.getElementById(id).value.trim(); }
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+if (KEY) { document.getElementById('key').value = KEY; login(); }
+</script>
+</body>
+</html>
