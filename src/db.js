@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   horizon_days INTEGER NOT NULL DEFAULT 14,
   services TEXT NOT NULL DEFAULT '',
   extra_info TEXT NOT NULL DEFAULT '',
+  language TEXT NOT NULL DEFAULT 'nl',
   formality TEXT NOT NULL DEFAULT 'u',
   voice_id TEXT NOT NULL DEFAULT '',
   google_refresh_token TEXT,
@@ -59,18 +60,26 @@ CREATE TABLE IF NOT EXISTS oauth_states (
 );
 `);
 
+// migrations for databases created before these columns existed
+{
+  const cols = db.prepare('PRAGMA table_info(tenants)').all().map(c => c.name);
+  if (!cols.includes('language')) {
+    db.exec("ALTER TABLE tenants ADD COLUMN language TEXT NOT NULL DEFAULT 'nl'");
+  }
+}
+
 export const tenants = {
   create(t) {
     const stmt = db.prepare(
       `INSERT INTO tenants (name, timezone, opening_hours, slot_minutes, min_notice_hours,
-        horizon_days, services, extra_info, formality, voice_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`
+        horizon_days, services, extra_info, language, formality, voice_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`
     );
     const r = stmt.run(
-      t.name, t.timezone || 'Europe/Amsterdam',
+      t.name, t.timezone || 'Europe/Brussels',
       t.opening_hours || defaultHours(),
       t.slot_minutes ?? 30, t.min_notice_hours ?? 2, t.horizon_days ?? 14,
-      t.services ?? '', t.extra_info ?? '', t.formality ?? 'u', t.voice_id ?? ''
+      t.services ?? '', t.extra_info ?? '', t.language ?? 'nl', t.formality ?? 'u', t.voice_id ?? ''
     );
     return this.get(Number(r.lastInsertRowid));
   },
@@ -81,7 +90,7 @@ export const tenants = {
   list() { return db.prepare('SELECT * FROM tenants ORDER BY id').all(); },
   update(id, fields) {
     const allowed = ['name','timezone','opening_hours','slot_minutes','min_notice_hours',
-      'horizon_days','services','extra_info','formality','voice_id',
+      'horizon_days','services','extra_info','language','formality','voice_id',
       'google_refresh_token','google_calendar_id','vapi_assistant_id'];
     const keys = Object.keys(fields).filter(k => allowed.includes(k));
     if (!keys.length) return this.get(id);

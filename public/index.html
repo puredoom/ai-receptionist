@@ -51,7 +51,13 @@
         <div><label>Bedrijfsnaam *</label><input id="t_name" placeholder="Kapsalon De Schaar"></div>
         <div><label>Diensten (voor de AI)</label><input id="t_services" placeholder="knippen, kleuren, baard trimmen"></div>
         <div><label>Afspraakduur (min)</label><input id="t_slot" type="number" value="30"></div>
-        <div><label>Aanspreekvorm</label><select id="t_formality"><option value="u">u (formeel)</option><option value="je">je (informeel)</option></select></div>
+        <div><label>Taal</label><select id="t_lang">
+          <option value="nl">Nederlands</option>
+          <option value="fr">Français</option>
+          <option value="en">English</option>
+          <option value="de">Deutsch</option>
+        </select></div>
+        <div><label>Aanspreekvorm</label><select id="t_formality"><option value="u">formeel (u / vous / Sie)</option><option value="je">informeel (je / tu / du)</option></select></div>
       </div>
       <label>Openingstijden (JSON — dag: lijst van [start, eind])</label>
       <textarea id="t_hours">{"mon":[["09:00","17:00"]],"tue":[["09:00","17:00"]],"wed":[["09:00","17:00"]],"thu":[["09:00","17:00"]],"fri":[["09:00","17:00"]],"sat":[],"sun":[]}</textarea>
@@ -106,7 +112,7 @@ async function loadTenants() {
   if (!list.length) { el.innerHTML = '<p class="muted">Nog geen bedrijven.</p>'; return; }
   el.innerHTML = '<table><tr><th>Bedrijf</th><th>Agenda</th><th>AI-assistent</th><th></th></tr>' +
     list.map(t => `<tr>
-      <td><b>${esc(t.name)}</b><br><span class="muted">${esc(t.services||'')}</span></td>
+      <td><b>${esc(t.name)}</b> <span class="pill ok">${esc((t.language||'nl').toUpperCase())}</span><br><span class="muted">${esc(t.services||'')}</span></td>
       <td>${t.google_connected ? '<span class="pill ok">gekoppeld</span>' : `<span class="pill warn">niet gekoppeld</span><br><a href="/oauth/google/start?tenant=${t.id}&key=${encodeURIComponent(KEY)}">Koppel Google Agenda</a>`}</td>
       <td>${t.vapi_assistant_id ? '<span class="pill ok">actief</span><br><span class="muted">'+esc(t.vapi_assistant_id)+'</span>' : '<span class="pill warn">nog niet aangemaakt</span>'}</td>
       <td>
@@ -123,6 +129,7 @@ async function createTenant() {
     await api('/api/tenants', { method: 'POST', body: JSON.stringify({
       name: val('t_name'), services: val('t_services'),
       slot_minutes: Number(val('t_slot')) || 30,
+      language: val('t_lang'),
       formality: val('t_formality'),
       opening_hours: val('t_hours'),
       extra_info: val('t_extra'),

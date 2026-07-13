@@ -142,6 +142,9 @@ function validateTenantFields(body) {
       throw new Error(`${k} must be a non-negative integer`);
     }
   }
+  if (body.language && !['nl', 'fr', 'en', 'de'].includes(body.language)) {
+    throw new Error('language must be one of: nl, fr, en, de');
+  }
   if (body.timezone) {
     try { new Intl.DateTimeFormat('en', { timeZone: body.timezone }); }
     catch { throw new Error(`invalid timezone "${body.timezone}"`); }

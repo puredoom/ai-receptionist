@@ -11,7 +11,7 @@ function toolDefs() {
       type: 'function',
       function: {
         name: 'getCurrentDateTime',
-        description: 'Geeft de huidige datum, weekdag en tijd in de tijdzone van het bedrijf. Gebruik dit altijd voordat je relatieve datums zoals "morgen" interpreteert.',
+        description: 'Returns the current date, weekday and time in the business timezone. Always use this before interpreting relative dates like "tomorrow".',
         parameters: { type: 'object', properties: {} },
       },
     },
@@ -19,12 +19,12 @@ function toolDefs() {
       type: 'function',
       function: {
         name: 'checkAvailability',
-        description: 'Vraagt echte vrije afspraaktijden op uit de agenda. Optioneel gefilterd op datum en dagdeel.',
+        description: 'Fetches real free appointment slots from the agenda. Optionally filtered by date and day part.',
         parameters: {
           type: 'object',
           properties: {
-            date: { type: 'string', description: 'Gewenste datum in JJJJ-MM-DD formaat (optioneel)' },
-            dayPart: { type: 'string', enum: ['morning', 'afternoon', 'evening'], description: 'Gewenst dagdeel (optioneel)' },
+            date: { type: 'string', description: 'Requested date in YYYY-MM-DD format (optional)' },
+            dayPart: { type: 'string', enum: ['morning', 'afternoon', 'evening'], description: 'Requested part of day (optional)' },
           },
         },
       },
@@ -33,17 +33,17 @@ function toolDefs() {
       type: 'function',
       function: {
         name: 'bookAppointment',
-        description: 'Boekt definitief een afspraak in de agenda. Alleen gebruiken nadat de beller de samenvatting expliciet heeft bevestigd.',
+        description: 'Definitively books an appointment in the agenda. Only use after the caller has explicitly confirmed the summary.',
         parameters: {
           type: 'object',
           required: ['name', 'date', 'time'],
           properties: {
-            name: { type: 'string', description: 'Volledige naam van de klant' },
-            phone: { type: 'string', description: 'Telefoonnummer van de klant' },
-            date: { type: 'string', description: 'Datum in JJJJ-MM-DD' },
-            time: { type: 'string', description: 'Starttijd in UU:MM (24-uurs)' },
-            service: { type: 'string', description: 'Gevraagde dienst of behandeling' },
-            notes: { type: 'string', description: 'Eventuele extra notities' },
+            name: { type: 'string', description: 'Full name of the customer' },
+            phone: { type: 'string', description: 'Customer phone number' },
+            date: { type: 'string', description: 'Date in YYYY-MM-DD' },
+            time: { type: 'string', description: 'Start time in HH:MM (24h)' },
+            service: { type: 'string', description: 'Requested service or treatment' },
+            notes: { type: 'string', description: 'Any extra notes' },
           },
         },
       },
@@ -52,14 +52,14 @@ function toolDefs() {
       type: 'function',
       function: {
         name: 'takeMessage',
-        description: 'Noteert een terugbelverzoek of bericht voor het bedrijf.',
+        description: 'Records a callback request or message for the business.',
         parameters: {
           type: 'object',
           required: ['message'],
           properties: {
             name: { type: 'string' },
             phone: { type: 'string' },
-            message: { type: 'string', description: 'De boodschap van de beller' },
+            message: { type: 'string', description: 'The caller\'s message' },
           },
         },
       },
@@ -81,7 +81,7 @@ export function assistantPayload(tenant) {
     transcriber: {
       provider: 'deepgram',
       model: 'nova-2',
-      language: 'nl',
+      language: ['nl', 'fr', 'en', 'de'].includes(tenant.language) ? tenant.language : 'nl',
     },
     voice: {
       provider: '11labs',

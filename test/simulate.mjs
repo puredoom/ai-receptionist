@@ -131,6 +131,42 @@ console.log('\n== tools ==');
   check('message stored', r9.body.results[0].result.startsWith('GELUKT') && messages.forTenant(tenant.id).length === 1);
 }
 
+console.log('\n== multilingual tenants ==');
+{
+  // NOTE: the fake calendar is shared across these tenants (real tenants each have
+  // their own Google Calendar), so each case books a different time slot.
+  const cases = [
+    ['fr', 'Salon Dupont', 'Créneaux disponibles', 'RÉUSSI', 'lundi', '11:00'],
+    ['en', 'The Barber Co', 'Available times', 'SUCCESS', 'Monday', '13:00'],
+    ['de', 'Friseur Müller', 'Verfügbare Termine', 'ERFOLG', 'Montag', '14:00'],
+  ];
+  for (const [lng, bizName, availWord, okWord, mondayWord, slotTime] of cases) {
+    const t2 = tenants.create({ name: bizName, language: lng, slot_minutes: 30, min_notice_hours: 2, horizon_days: 7 });
+    tenants.update(t2.id, { vapi_assistant_id: `asst_${lng}` });
+    const callL = async (tool, args) => {
+      const res = fakeRes();
+      await handle({ headers: { 'x-vapi-secret': 'test-secret' }, body: { message: {
+        type: 'tool-calls', call: { assistantId: `asst_${lng}` },
+        toolCallList: [{ id: 't', function: { name: tool, arguments: JSON.stringify(args) } }],
+      } } }, res);
+      return res.body.results[0].result;
+    };
+    const avail = await callL('checkAvailability', {});
+    check(`${lng}: availability localized`, avail.startsWith(availWord), avail);
+    const booked = await callL('bookAppointment',
+      { name: 'Test Client', phone: '0470112233', date: '2026-07-20', time: slotTime });
+    check(`${lng}: booking confirmation localized (${okWord}, ${mondayWord})`,
+      booked.includes(okWord) && booked.includes(mondayWord), booked);
+  }
+
+  const { buildSystemPrompt, buildFirstMessage } = await import('../src/prompt.js');
+  const frT = tenants.create({ name: 'Salon X', language: 'fr' });
+  check('fr prompt is French', buildSystemPrompt(frT).includes('Rôle'));
+  check('fr first message is French', buildFirstMessage(frT).startsWith('Bonjour'));
+  const badLang = tenants.create({ name: 'Weird', language: 'xx' });
+  check('unknown language falls back to Dutch', buildFirstMessage(badLang).includes('Goedendag'));
+}
+
 console.log('\n== end-of-call report ==');
 {
   const res = fakeRes();
